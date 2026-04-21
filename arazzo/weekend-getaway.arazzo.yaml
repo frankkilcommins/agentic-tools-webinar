@@ -1,0 +1,325 @@
+arazzo: "1.0.0"
+
+info:
+  title: Weekend Getaway Planner
+  summary: Plan a spontaneous weekend getaway — check the weather, find a hotel, book it, and block your calendar.
+  description: >
+    Checks the 5–7 day forecast for a destination. If next Friday looks good
+    (no heavy rain, no active weather warnings), searches hotel availability for
+    the requested number of guests. Prebooks and confirms the booking, then
+    creates a Google Calendar block and returns any conflicting events.
+  version: "1.0.0"
+
+sourceDescriptions:
+  - name: open-meteo
+    url: https://raw.githubusercontent.com/jentic/jentic-public-apis/main/apis/openapi/open-meteo.com/main/1.0/openapi.json
+    type: openapi
+  - name: weatherapi
+    url: https://raw.githubusercontent.com/jentic/jentic-public-apis/main/apis/openapi/weatherapi.com/main/1.0.0/openapi.json
+    type: openapi
+  - name: liteapi-hotel-data
+    url: https://docs.liteapi.travel/openapi/api-hotel-data.json
+    type: openapi
+  - name: liteapi-search
+    url: https://docs.liteapi.travel/openapi/api-search.json
+    type: openapi
+  - name: liteapi-booking
+    url: https://docs.liteapi.travel/openapi/api-booking.json
+    type: openapi
+  - name: google-calendar
+    url: https://raw.githubusercontent.com/jentic/jentic-public-apis/main/apis/openapi/googleapis.com/calendar/v3/openapi.json
+    type: openapi
+
+workflows:
+  - workflowId: weekendGetawayPlanner
+    summary: Plan a weekend getaway end-to-end
+    description: >
+      Orchestrates weather checking, hotel search and booking, and calendar
+      management for a spontaneous weekend trip.
+    inputs:
+      type: object
+      required:
+        - location
+        - latitude
+        - longitude
+        - countryCode
+        - cityName
+        - checkinDate
+        - checkoutDate
+        - liteApiKey
+        - weatherApiKey
+        - guestFirstName
+        - guestLastName
+        - guestEmail
+      properties:
+        location:
+          type: string
+          description: Human-readable destination name (e.g. "Dublin, Ireland")
+        latitude:
+          type: number
+          description: Latitude of the destination
+        longitude:
+          type: number
+          description: Longitude of the destination
+        countryCode:
+          type: string
+          description: ISO 3166-1 alpha-2 country code (e.g. "IE")
+        cityName:
+          type: string
+          description: City name for hotel search (e.g. "Dublin")
+        checkinDate:
+          type: string
+          description: Check-in date in YYYY-MM-DD format (next Friday)
+        checkoutDate:
+          type: string
+          description: Check-out date in YYYY-MM-DD format (day after checkin)
+        guests:
+          type: integer
+          description: Number of adult guests
+          default: 2
+        currency:
+          type: string
+          description: Currency for hotel pricing
+          default: EUR
+        guestNationality:
+          type: string
+          description: Guest nationality as ISO country code
+          default: IE
+        calendarId:
+          type: string
+          description: Google Calendar ID to create the event on
+          default: primary
+        weatherApiKey:
+          type: string
+          description: WeatherAPI.com API key
+        liteApiKey:
+          type: string
+          description: liteapi.travel API key
+        guestFirstName:
+          type: string
+          description: Guest first name for booking
+        guestLastName:
+          type: string
+          description: Guest last name for booking
+        guestEmail:
+          type: string
+          description: Guest email address for booking confirmation
+    outputs:
+      forecastDates: $steps.getForecast.outputs.forecastDates
+      prebookId: $steps.prebookRate.outputs.prebookId
+      bookingId: $steps.confirmBooking.outputs.bookingId
+      calendarEventId: $steps.createCalendarEvent.outputs.eventId
+      calendarConflicts: $steps.listCalendarEvents.outputs.conflicts
+
+    steps:
+      - stepId: getForecast
+        description: Retrieve the 7-day daily weather forecast for the destination
+        operationPath: '{$sourceDescriptions.open-meteo.url}#/paths/~1v1~1forecast/get'
+        parameters:
+          - name: latitude
+            in: query
+            value: $inputs.latitude
+          - name: longitude
+            in: query
+            value: $inputs.longitude
+          - name: daily
+            in: query
+            value: "precipitation_sum,weathercode,wind_speed_10m_max"
+          - name: timezone
+            in: query
+            value: "auto"
+          - name: forecast_days
+            in: query
+            value: 7
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          forecastDates: $response.body#/daily/time
+          precipitation: $response.body#/daily/precipitation_sum
+          weatherCodes: $response.body#/daily/weathercode
+
+      - stepId: checkWeatherAlerts
+        description: Check for active weather warnings at the destination
+        operationId: getForecastWeather
+        parameters:
+          - name: key
+            in: query
+            value: $inputs.weatherApiKey
+          - name: q
+            in: query
+            value: $inputs.location
+          - name: days
+            in: query
+            value: 3
+          - name: alerts
+            in: query
+            value: "yes"
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          alerts: $response.body#/alerts/alert
+
+      - stepId: evaluateWeather
+        description: >
+          Re-fetch forecast for the exact Friday to confirm it meets the
+          getaway threshold: precipitation < 5mm and no storm/heavy-rain
+          weather codes (61+). Fails the step — blocking further execution
+          — if conditions are unsuitable.
+        operationPath: '{$sourceDescriptions.open-meteo.url}#/paths/~1v1~1forecast/get'
+        parameters:
+          - name: latitude
+            in: query
+            value: $inputs.latitude
+          - name: longitude
+            in: query
+            value: $inputs.longitude
+          - name: daily
+            in: query
+            value: "precipitation_sum,weathercode"
+          - name: timezone
+            in: query
+            value: "auto"
+          - name: start_date
+            in: query
+            value: $inputs.checkinDate
+          - name: end_date
+            in: query
+            value: $inputs.checkinDate
+        successCriteria:
+          - condition: $statusCode == 200
+          - condition: $response.body#/daily/precipitation_sum/0 < 5
+          - condition: $response.body#/daily/weathercode/0 < 61
+        outputs:
+          fridayPrecipitation: $response.body#/daily/precipitation_sum/0
+          fridayWeatherCode: $response.body#/daily/weathercode/0
+
+      - stepId: listHotels
+        description: Retrieve hotels available in the destination city
+        operationPath: '{$sourceDescriptions.liteapi-hotel-data.url}#/paths/~1data~1hotels/get'
+        parameters:
+          - name: X-API-Key
+            in: header
+            value: $inputs.liteApiKey
+          - name: countryCode
+            in: query
+            value: $inputs.countryCode
+          - name: cityName
+            in: query
+            value: $inputs.cityName
+          - name: limit
+            in: query
+            value: 20
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          hotels: $response.body#/data
+
+      - stepId: searchHotelRates
+        description: Search availability and pricing for hotels on the target dates
+        operationPath: '{$sourceDescriptions.liteapi-search.url}#/paths/~1hotels~1rates/post'
+        parameters:
+          - name: X-API-Key
+            in: header
+            value: $inputs.liteApiKey
+        requestBody:
+          contentType: application/json
+          payload:
+            hotelIds: $steps.listHotels.outputs.hotels
+            checkin: $inputs.checkinDate
+            checkout: $inputs.checkoutDate
+            currency: $inputs.currency
+            guestNationality: $inputs.guestNationality
+            occupancies:
+              - adults: $inputs.guests
+                children: []
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          rateResults: $response.body#/data
+          bestOfferId: $response.body#/data/0/roomTypes/0/offerId
+          bestOfferPrice: $response.body#/data/0/roomTypes/0/price/totalPrice
+          bestOfferCurrency: $response.body#/data/0/roomTypes/0/price/currency
+
+      - stepId: prebookRate
+        description: Lock in the selected hotel rate to confirm availability and price
+        operationPath: '{$sourceDescriptions.liteapi-booking.url}#/paths/~1rates~1prebook/post'
+        parameters:
+          - name: X-API-Key
+            in: header
+            value: $inputs.liteApiKey
+        requestBody:
+          contentType: application/json
+          payload:
+            offerId: $steps.searchHotelRates.outputs.bestOfferId
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          prebookId: $response.body#/data/prebookId
+          confirmedPrice: $response.body#/data/price
+
+      - stepId: confirmBooking
+        description: Complete the hotel booking using the prebook ID
+        operationPath: '{$sourceDescriptions.liteapi-booking.url}#/paths/~1rates~1book/post'
+        parameters:
+          - name: X-API-Key
+            in: header
+            value: $inputs.liteApiKey
+        requestBody:
+          contentType: application/json
+          payload:
+            prebookId: $steps.prebookRate.outputs.prebookId
+            guestInfo:
+              guestFirstName: $inputs.guestFirstName
+              guestLastName: $inputs.guestLastName
+              guestEmail: $inputs.guestEmail
+            payment:
+              paymentType: INVOICE
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          bookingId: $response.body#/data/bookingId
+          bookingStatus: $response.body#/data/status
+
+      - stepId: listCalendarEvents
+        description: List existing calendar events on the getaway dates to surface conflicts
+        operationId: calendar.events.list
+        parameters:
+          - name: calendarId
+            in: path
+            value: $inputs.calendarId
+          - name: timeMin
+            in: query
+            value: $inputs.checkinDate
+          - name: timeMax
+            in: query
+            value: $inputs.checkoutDate
+          - name: singleEvents
+            in: query
+            value: true
+          - name: orderBy
+            in: query
+            value: startTime
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          conflicts: $response.body#/items
+
+      - stepId: createCalendarEvent
+        description: Create an all-day calendar block for the weekend getaway
+        operationId: calendar.events.insert
+        parameters:
+          - name: calendarId
+            in: path
+            value: $inputs.calendarId
+        requestBody:
+          contentType: application/json
+          payload:
+            summary: $inputs.location
+            start:
+              date: $inputs.checkinDate
+            end:
+              date: $inputs.checkoutDate
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          eventId: $response.body#/id
