@@ -1,0 +1,19 @@
+{
+  "name": "weekend-getaway-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing 6 tools for the Weekend Getaway Planner demo",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

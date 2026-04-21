@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "weekend-getaway-planner": {
+      "command": "node",
+      "args": [
+        "/Users/frank/GitHub/agentic-tools-webinar/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "WEATHER_API_KEY": "${env:WEATHER_API_KEY}",
+        "LITEAPI_KEY": "${env:LITEAPI_KEY}",
+        "GOOGLE_CALENDAR_TOKEN": "${env:GOOGLE_CALENDAR_TOKEN}"
+      }
+    }
+  }
+}
