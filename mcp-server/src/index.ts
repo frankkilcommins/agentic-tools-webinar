@@ -46,6 +46,7 @@ import {
 } from "./tools/booking.js";
 
 import { ManageCalendarSchema, manageCalendar } from "./tools/calendar.js";
+import { RunWorkflowSchema, runWeekendGetawayWorkflow } from "./tools/workflow.js";
 
 // ── Server ────────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,21 @@ server.tool(
   { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   async (input) => {
     const result = await manageCalendar(ManageCalendarSchema.parse(input));
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+server.tool(
+  "run_weekend_getaway_workflow",
+  "[Act 3 — Arazzo Workflow] Execute the complete weekend getaway plan as a single " +
+    "deterministic workflow. Pass the destination, travel dates, and guest details. " +
+    "The workflow automatically geocodes the city, checks the weather, finds and books " +
+    "a hotel, and blocks your calendar — in a guaranteed sequence with no LLM decisions " +
+    "between steps. API keys are injected from environment variables.",
+  RunWorkflowSchema.shape,
+  { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  async (input) => {
+    const result = await runWeekendGetawayWorkflow(RunWorkflowSchema.parse(input));
     return { content: [{ type: "text", text: result }] };
   }
 );

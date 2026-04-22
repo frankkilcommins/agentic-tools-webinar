@@ -16,13 +16,14 @@ weekend-getaway-repo/
 │   └── weekend-getaway.arazzo.yaml   # Act 3: validated Arazzo workflow
 ├── mcp-server/               # Act 1 & 3: MCP server
 │   ├── src/
-│   │   ├── index.ts          # Server entry point (7 tool registrations)
+│   │   ├── index.ts          # Server entry point (8 tool registrations)
 │   │   ├── config.ts         # Env-var credential loader
 │   │   └── tools/
 │   │       ├── weather.ts    # Tools 1–2: Open-Meteo + WeatherAPI
 │   │       ├── hotels.ts     # Tools 3–4: liteapi Hotel Data + Search
 │   │       ├── booking.ts    # Tools 5–6: liteapi Prebook + Confirm
-│   │       └── calendar.ts   # Tool 7: Google Calendar (list + create)
+│   │       ├── calendar.ts   # Tool 7: Google Calendar (list + create)
+│   │       └── workflow.ts   # Tool 8: Arazzo workflow executor (Act 3)
 │   ├── .env.example          # Environment variable template
 │   ├── package.json
 │   └── tsconfig.json
@@ -34,17 +35,18 @@ weekend-getaway-repo/
 
 ---
 
-## The 7 MCP Tools (Act 1)
+## The 8 MCP Tools
 
-| # | Tool | API | Team |
-|---|------|-----|------|
-| 1 | `get_weather_forecast` | Open-Meteo (free, no auth) | Weather |
-| 2 | `check_weather_alerts` | WeatherAPI.com | Weather |
-| 3 | `find_hotels` | liteapi Hotel Data API | Hotel Inventory |
-| 4 | `search_hotel_rates` | liteapi Search API | Hotel Inventory |
-| 5 | `prebook_hotel_rate` | liteapi Booking API | Booking & Payments |
-| 6 | `confirm_hotel_booking` | liteapi Booking API | Booking & Payments |
-| 7 | `manage_calendar` | Google Calendar API | Calendar |
+| # | Tool | API | Act | Team |
+|---|------|-----|-----|------|
+| 1 | `get_weather_forecast` | Open-Meteo (free, no auth) | 1 & 2 | Weather |
+| 2 | `check_weather_alerts` | WeatherAPI.com | 1 & 2 | Weather |
+| 3 | `find_hotels` | liteapi Hotel Data API | 1 & 2 | Hotel Inventory |
+| 4 | `search_hotel_rates` | liteapi Search API | 1 & 2 | Hotel Inventory |
+| 5 | `prebook_hotel_rate` | liteapi Booking API | 1 & 2 | Booking & Payments |
+| 6 | `confirm_hotel_booking` | liteapi Booking API | 1 & 2 | Booking & Payments |
+| 7 | `manage_calendar` | Google Calendar API | 1 & 2 | Calendar |
+| 8 | `run_weekend_getaway_workflow` | All of the above | **3** | Workflow |
 
 ---
 
@@ -126,7 +128,7 @@ Open the repository root in VS Code. Claude Code will auto-detect `.vscode/mcp.j
 
 ### 6. Verify the tools are loaded
 
-In VS Code, open the Claude Code panel. The 7 tools should appear in the tool list:
+In VS Code, open the Claude Code panel. The 8 tools should appear in the tool list:
 - `get_weather_forecast`
 - `check_weather_alerts`
 - `find_hotels`
@@ -134,6 +136,7 @@ In VS Code, open the Claude Code panel. The 7 tools should appear in the tool li
 - `prebook_hotel_rate`
 - `confirm_hotel_booking`
 - `manage_calendar`
+- `run_weekend_getaway_workflow`
 
 ---
 
@@ -177,4 +180,16 @@ See [`skill/SKILL.md`](skill/SKILL.md). Load this into the agent's system contex
 
 ## Act 3: Arazzo Workflow
 
-See [`arazzo/weekend-getaway.arazzo.yaml`](arazzo/weekend-getaway.arazzo.yaml). The Arazzo document encodes the full workflow as a deterministic, executable specification — no LLM orchestration required. Connect it to the `@jentic/arazzo-runner` as a single MCP tool to complete the story.
+See [`arazzo/weekend-getaway.arazzo.yaml`](arazzo/weekend-getaway.arazzo.yaml). The Arazzo document encodes the full workflow as a deterministic, executable specification.
+
+The 8th MCP tool — `run_weekend_getaway_workflow` — executes this workflow in a single tool call. No LLM decisions between steps. Geocode → weather gate → hotel search → booking → calendar, all in sequence.
+
+**Act 3 demo prompt:**
+
+```
+Use the run_weekend_getaway_workflow tool to plan a weekend getaway to Galway,
+Ireland for 25–26 April for 2 adults.
+Guest: Frank Kilcommins, fkilcommins@gmail.com
+```
+
+One tool call. Deterministic. The workflow handles the sandbox payment failure gracefully (skips to calendar steps) and returns a structured summary.
