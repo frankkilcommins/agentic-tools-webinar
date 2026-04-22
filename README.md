@@ -2,11 +2,10 @@
 
 A three-act demo for the webinar **"Agent Skills, MCP, and Workflows: Tools for Enabling Agents"**.
 
-Live / On-demand Session: https://jentic.com/webinar/agent-skills-mcp-workflows
-Slides: http://dret.net/lectures/webinar-2026/agentic-tools
-
 Each act builds on the previous, showing how agent tooling evolves from raw MCP tools → guided skills → deterministic Arazzo workflows.
 
+- **Live / On-demand Session:** https://jentic.com/webinar/agent-skills-mcp-workflows
+- **Slides:** http://dret.net/lectures/webinar-2026/agentic-tools
 ---
 
 ## Repository Structure
